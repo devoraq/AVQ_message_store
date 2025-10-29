@@ -1,0 +1,72 @@
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+  modules-download-mode: mod
+
+linters:
+  default: none
+  enable:
+    - govet
+    - staticcheck
+    - errcheck
+    - errorlint
+    - wrapcheck          # ← включён
+    - ineffassign
+    - unused
+    - durationcheck
+    - contextcheck
+    - containedctx
+    - noctx
+    - fatcontext
+    - copyloopvar
+    - bodyclose
+    - canonicalheader
+    - nosprintfhostport
+    - sloglint
+    - loggercheck
+    - spancheck
+    - gosec
+    - bidichk
+    - asciicheck
+    - gocyclo
+    - dupl
+    - revive
+    - importas
+    - prealloc
+    - perfsprint
+    - paralleltest
+    - tparallel
+    - thelper
+    - testpackage
+
+  settings:
+    gocyclo:
+      min-complexity: 20
+
+    spancheck:
+      checks: [end, record-error, set-status]
+
+    wrapcheck:
+      ignore-sigs:
+        - errors.New
+        - errors.Join
+        - fmt.Errorf
+        - context.Context.Err
+      ignore-sig-regexps:
+        - '^func \(context\.Context\)\.Err\(\) error$'
+        - '^context\\.Canceled$'
+        - '^context\\.DeadlineExceeded$'
+        - '^io\\.EOF$'
+      ignore-interface-regexps:
+        - '^context\.Context$'
+      extra-ignore-sigs:
+        - '(context.Context).Err(' 
+
+  exclusions:
+    generated: strict
+    paths: [gen, web]
+    rules:
+      - path: '_test\\.go$'
+        linters: [dupl, gocyclo, gosec]

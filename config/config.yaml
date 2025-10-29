@@ -1,0 +1,17 @@
+app:
+  grpc_enable: true
+  http_enable: true
+
+http:
+  addr: ":8080"
+  read_header_timeout: 2s
+  read_timeout: 5s
+  write_timeout: 10s
+  idle_timeout: 60s
+
+retry:
+  attempts: 5
+  initial: 1s
+  max: 15s
+  factor: 2.0
+  jitter: true
