@@ -27,7 +27,7 @@ type App struct {
 }
 
 // New создает контейнер приложения и подготавливает инфраструктурные компоненты.
-func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error) {
+func New(_ context.Context, cfg *config.Config, log *slog.Logger) (*App, error) {
 	app := &App{
 		log:       log,
 		container: NewContainer(log, cfg.RetryConfig),
