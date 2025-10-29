@@ -1,6 +1,15 @@
 app:
   grpc_enable: true
   http_enable: true
+  shutdown_timeout: 10s
+
+mongo:
+  addr: "localhost:27017"
+  username: "root"
+  password: "password"
+  db_name: "message_store"
+  connect_timeout: 10s
+  max_pool_size: 10
 
 http:
   addr: ":8080"

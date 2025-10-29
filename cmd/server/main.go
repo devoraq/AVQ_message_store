@@ -1,8 +1,8 @@
+// Package main запускает HTTP-сервис хранения сообщений.
 package main
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -16,30 +16,49 @@ import (
 const pathConfig = "./config/config.yaml"
 
 func main() {
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	rootCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
 	logger := initLogger()
-
 	cfg := config.LoadConfig(pathConfig)
-	fmt.Println(cfg)
 
-	app, err := app.New(ctx, cfg, logger)
-	if err != nil {
-		logger.Error("app error: ", slog.String("err", err.Error()))
-		os.Exit(1)
+	appCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	a := mustInitApp(appCtx, cfg, logger)
+	a.StartAsync(appCtx)
+
+	<-rootCtx.Done()
+	logger.Info("termination signal received, shutting down...")
+
+	cancel()
+
+	shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
+	defer cancelShutdown()
+
+	if err := a.Shutdown(shutdownCtx); err != nil {
+		logger.Error("graceful shutdown failed", slog.String("error", err.Error()))
+	} else {
+		logger.Info("service stopped gracefully")
 	}
-	app.StartAsync()
-
-	<-ctx.Done()
-	logger.Info("signal received, shutting down...")
-
-	app.Shutdown(ctx)
 }
 
 func initLogger() *slog.Logger {
-	logHandler := logger.NewPrettyHandler(os.Stdout, logger.PrettyHandlerOptions{})
+	logHandler := logger.NewPrettyHandler(os.Stdout, logger.PrettyHandlerOptions{
+		Opts: slog.HandlerOptions{
+			Level: slog.LevelDebug,
+		},
+	})
 	logger := slog.New(logHandler)
 	slog.SetDefault(logger)
 	return logger
+}
+
+func mustInitApp(ctx context.Context, cfg *config.Config, log *slog.Logger) *app.App {
+	a, err := app.New(ctx, cfg, log)
+	if err != nil {
+		log.Error("failed to initialize app", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
+	return a
 }

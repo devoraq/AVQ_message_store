@@ -31,8 +31,10 @@ func (h *PrettyHandler) Enabled(_ context.Context, _ slog.Level) bool {
 
 // Handle форматирует запись slog с подсветкой уровня и печатает её.
 func (h *PrettyHandler) Handle(_ context.Context, r slog.Record) error {
-	level := r.Level.String() + ":"
+	var b strings.Builder
+	b.Grow(256)
 
+	level := r.Level.String() + ":"
 	switch r.Level {
 	case slog.LevelDebug:
 		level = color.MagentaString(level)
@@ -44,32 +46,42 @@ func (h *PrettyHandler) Handle(_ context.Context, r slog.Record) error {
 		level = color.RedString(level)
 	}
 
-	var lines []string
+	b.WriteString(r.Time.Format("[15:05:05.000] "))
+	b.WriteString(level)
+	b.WriteByte(' ')
+	b.WriteString(color.WhiteString(r.Message))
+
+	var attrs []slog.Attr
 	r.Attrs(func(a slog.Attr) bool {
-		valueLines := formatAttrValue(a.Value.Any())
-		for i, line := range valueLines {
-			prefix := fmt.Sprintf("  %s: ", color.CyanString(a.Key))
-			if i > 0 {
-				prefix = "    "
-			}
-			lines = append(lines, prefix+line)
-		}
+		attrs = append(attrs, a)
 		return true
 	})
 
-	timeStr := r.Time.Format("[15:05:05.000]")
-	msg := color.WhiteString(r.Message)
-
-	if len(lines) == 0 {
-		h.l.Println(timeStr, level, msg+" {}")
-	} else {
-		h.l.Println(timeStr, level, msg+" {")
-		for _, line := range lines {
-			h.l.Println(line)
-		}
-		h.l.Println("}")
+	if len(attrs) == 0 {
+		h.l.Println(b.String())
+		return nil
 	}
 
+	b.WriteString(" {\n")
+
+	for _, a := range attrs {
+		valueLines := formatAttrValue(a.Value.Any())
+		for i, line := range valueLines {
+			if i == 0 {
+				b.WriteString("  ")
+				b.WriteString(color.CyanString(a.Key))
+				b.WriteString(": ")
+			} else {
+				b.WriteString("    ")
+			}
+			b.WriteString(line)
+			b.WriteByte('\n')
+		}
+	}
+
+	b.WriteString("}")
+
+	h.l.Println(b.String())
 	return nil
 }
 

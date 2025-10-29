@@ -1,3 +1,4 @@
+// Package app содержит координатор жизненного цикла компонентов приложения.
 package app
 
 import (
@@ -11,8 +12,10 @@ import (
 
 	"github.com/devoraq/AVQ_message_store/internal/app/happ"
 	"github.com/devoraq/AVQ_message_store/internal/infrastructure/config"
+	"github.com/devoraq/AVQ_message_store/internal/infrastructure/nosql/mongodb"
 )
 
+// App управляет жизненным циклом компонентов приложения.
 type App struct {
 	log  *slog.Logger
 	happ *happ.HApp
@@ -23,20 +26,26 @@ type App struct {
 	shutdownOnce sync.Once
 }
 
+// New создает контейнер приложения и подготавливает инфраструктурные компоненты.
 func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error) {
 	app := &App{
 		log:       log,
 		container: NewContainer(log, cfg.RetryConfig),
 	}
 
-	if cfg.AppConfig.IsHttpEnabled {
+	mongo := mustInitMongo(cfg, log)
+
+	app.container.Add(mongo)
+
+	if cfg.IsHTTPEnabled {
 		app.happ = buildHTTP(cfg.HTTPConfig, log)
 	}
 
 	return app, nil
 }
 
-func (a *App) StartAsync() {
+// StartAsync запускает фоновые компоненты, включая HTTP-сервер.
+func (a *App) StartAsync(ctx context.Context) {
 	const op = "App.StartAsync"
 	log := a.log.With("op", op)
 
@@ -44,6 +53,11 @@ func (a *App) StartAsync() {
 		"Application started",
 		slog.Int("PID", os.Getpid()),
 	)
+
+	if err := a.container.StartAll(ctx); err != nil {
+		log.Error("failed to start components", slog.Any("error", err))
+		os.Exit(1)
+	}
 
 	// if a.GRPC != nil {
 	// 	go a.GRPC.MustStart()
@@ -53,12 +67,8 @@ func (a *App) StartAsync() {
 	}
 }
 
-// Shutdown корректно останавливает HTTP-сервер и все зарегистрированные компоненты.
+// Shutdown корректно останавливает запущенные компоненты.
 func (a *App) Shutdown(ctx context.Context) error {
-	if ctx == nil {
-		return errors.New("app shutdown: context is nil")
-	}
-
 	select {
 	case <-ctx.Done():
 		return fmt.Errorf("app shutdown: %w", ctx.Err())
@@ -70,8 +80,10 @@ func (a *App) Shutdown(ctx context.Context) error {
 		// if a.consumerCancel != nil {
 		// 	a.consumerCancel()
 		// }
-		if err := a.happ.Shutdown(ctx); err != nil {
-			errs = append(errs, err)
+		if a.happ != nil {
+			if err := a.happ.Shutdown(ctx); err != nil {
+				errs = append(errs, err)
+			}
 		}
 		if err := a.container.StopAll(ctx); err != nil {
 			errs = append(errs, err)
@@ -85,4 +97,17 @@ func (a *App) Shutdown(ctx context.Context) error {
 func buildHTTP(cfg *config.HTTPConfig, log *slog.Logger) *happ.HApp {
 	mux := http.NewServeMux()
 	return happ.NewHApp(cfg, log, mux)
+}
+
+func mustInitMongo(cfg *config.Config, log *slog.Logger) *mongodb.MongoDB {
+	client, err := mongodb.New(&mongodb.MongoDeps{
+		Cfg:    cfg.Mongo,
+		Logger: log,
+	})
+	if err != nil {
+		log.Error("failed to initialize MongoDB client", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
+
+	return client
 }
