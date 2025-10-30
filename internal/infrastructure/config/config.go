@@ -26,7 +26,7 @@ type AppConfig struct {
 	ShutdownTimeout time.Duration `yaml:"shutdown_timeout" env-default:"10s"`
 }
 
-// Mongo хранит параметры подключения к MongoDB.
+// MongoConfig хранит параметры подключения к MongoDB.
 type MongoConfig struct {
 	Addr           string        `yaml:"addr"`
 	Username       string        `yaml:"username"`

@@ -15,7 +15,7 @@ import (
 // Do выполняет переданную функцию fn с логикой повторных попыток.
 // Функция будет повторяться до успешного выполнения или пока не исчерпаются все попытки.
 // Поддерживает отмену через context, экспоненциальный рост задержки и случайный разброс (jitter).
-func Do(ctx context.Context, cfg *config.Config, fn func(ctx context.Context) error) error {
+func Do(ctx context.Context, cfg *config.Config, fn func(ctx context.Context) error) (lastErr error) {
 	if cfg == nil {
 		return errors.New("retry.Do: config cannot be nil")
 	}
@@ -23,13 +23,10 @@ func Do(ctx context.Context, cfg *config.Config, fn func(ctx context.Context) er
 	// sane defaults, если значения не заданы
 	sanitize(cfg)
 
-	var lastErr error
 	delay := cfg.Initial
 
 	for attempt := 1; attempt <= cfg.Attempts; attempt++ {
-		if err := fn(ctx); err == nil {
-			return nil
-		} else {
+		if err := fn(ctx); err != nil {
 			lastErr = err
 		}
 

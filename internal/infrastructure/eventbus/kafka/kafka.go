@@ -206,7 +206,7 @@ func (k *Kafka) StartConsuming(ctx context.Context) {
 func (k *Kafka) fetch(ctx context.Context) (kafka.Message, error) {
 	m, err := k.consumer.FetchMessage(ctx)
 	if err != nil {
-		return kafka.Message{}, err
+		return kafka.Message{}, fmt.Errorf("error fetch: %w", err)
 	}
 	k.deps.Log.Debug("message received", "topic", m.Topic, "offset", m.Offset, "size", len(m.Value))
 	return m, nil
