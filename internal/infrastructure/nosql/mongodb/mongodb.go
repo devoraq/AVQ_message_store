@@ -3,7 +3,7 @@ package mongodb
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"log/slog"
 
 	"github.com/devoraq/AVQ_message_store/internal/infrastructure/config"
@@ -22,7 +22,7 @@ type MongoDB struct {
 
 // MongoDeps содержит зависимости, необходимые для инициализации MongoDB-клиента.
 type MongoDeps struct {
-	Cfg    *config.Mongo
+	Cfg    *config.MongoConfig
 	Logger *slog.Logger
 }
 
@@ -40,7 +40,7 @@ func New(deps *MongoDeps) (*MongoDB, error) {
 
 	client, err := mongo.Connect(&opts)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect mongodb: %w", err)
+		return nil, errors.Join(ErrConnect, err)
 	}
 
 	mongo := MongoDB{
@@ -62,10 +62,8 @@ func (md *MongoDB) Start(ctx context.Context) error {
 		slog.String("addr", md.deps.Cfg.Addr),
 	)
 
-	log.Debug("Connecting to MongoDB")
-
 	if err := md.Ping(ctx, readpref.Primary()); err != nil {
-		return fmt.Errorf("mongodb ping: %w", err)
+		return errors.Join(ErrPing, err)
 	}
 
 	log.Debug("MongoDB connection established",
@@ -86,7 +84,7 @@ func (md *MongoDB) Stop(ctx context.Context) error {
 	log.Debug("Disconnecting from MongoDB")
 
 	if err := md.Disconnect(ctx); err != nil {
-		return fmt.Errorf("mongodb disconnect: %w", err)
+		return errors.Join(ErrDisconnect, err)
 	}
 
 	return nil

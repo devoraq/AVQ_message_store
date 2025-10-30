@@ -3,6 +3,26 @@ app:
   http_enable: true
   shutdown_timeout: 10s
 
+kafka:
+  address: "127.0.0.1:9092"
+  test-topic: "test-topic"
+  group-id: "test-group"
+  network: "tcp"
+  commit_timeout: 10s
+  fetchBackoff:
+    attempts: 5     
+    initial: 500ms  
+    max: 10s        
+    factor: 2.0     
+    jitter: true    
+  commitBackoff:
+    attempts: 8
+    initial: 200ms
+    max: 5s
+    factor: 1.8
+    jitter: true
+
+
 mongo:
   addr: "localhost:27017"
   username: "root"

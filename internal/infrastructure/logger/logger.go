@@ -21,7 +21,9 @@ type PrettyHandlerOptions struct {
 
 // PrettyHandler реализует интерфейс slog.Handler и печатает записи в компактном виде.
 type PrettyHandler struct {
-	l *log.Logger
+	l      *log.Logger
+	attrs  []slog.Attr
+	groups []string
 }
 
 // Enabled всегда возвращает true, предоставляя slog.Logger решать, писать ли запись.
@@ -51,25 +53,31 @@ func (h *PrettyHandler) Handle(_ context.Context, r slog.Record) error {
 	b.WriteByte(' ')
 	b.WriteString(color.WhiteString(r.Message))
 
-	var attrs []slog.Attr
+	prefix := strings.Join(h.groups, ".")
+	pairs := make([]attrPair, 0, len(h.attrs)+r.NumAttrs())
+
+	for _, a := range h.attrs {
+		flattenAttr(prefix, a, &pairs)
+	}
+
 	r.Attrs(func(a slog.Attr) bool {
-		attrs = append(attrs, a)
+		flattenAttr(prefix, a, &pairs)
 		return true
 	})
 
-	if len(attrs) == 0 {
+	if len(pairs) == 0 {
 		h.l.Println(b.String())
 		return nil
 	}
 
 	b.WriteString(" {\n")
 
-	for _, a := range attrs {
-		valueLines := formatAttrValue(a.Value.Any())
+	for _, a := range pairs {
+		valueLines := formatAttrValue(a.value)
 		for i, line := range valueLines {
 			if i == 0 {
 				b.WriteString("  ")
-				b.WriteString(color.CyanString(a.Key))
+				b.WriteString(color.CyanString(a.key))
 				b.WriteString(": ")
 			} else {
 				b.WriteString("    ")
@@ -85,14 +93,26 @@ func (h *PrettyHandler) Handle(_ context.Context, r slog.Record) error {
 	return nil
 }
 
-// WithAttrs возвращает обработчик без изменений, поскольку PrettyHandler не кэширует атрибуты.
-func (h *PrettyHandler) WithAttrs(_ []slog.Attr) slog.Handler {
-	return h
+// WithAttrs возвращает новый обработчик с добавленными атрибутами.
+func (h *PrettyHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	if len(attrs) == 0 {
+		return h
+	}
+	clone := h.clone()
+	for _, a := range attrs {
+		clone.attrs = append(clone.attrs, resolveAttr(a))
+	}
+	return clone
 }
 
-// WithGroup игнорирует группировку и возвращает исходный обработчик.
-func (h *PrettyHandler) WithGroup(_ string) slog.Handler {
-	return h
+// WithGroup возвращает новый обработчик, который учитывает указанную группу.
+func (h *PrettyHandler) WithGroup(name string) slog.Handler {
+	if name == "" {
+		return h
+	}
+	clone := h.clone()
+	clone.groups = append(clone.groups, name)
+	return clone
 }
 
 // NewPrettyHandler создаёт обработчик, который печатает структурированные логи slog
@@ -107,6 +127,62 @@ func NewPrettyHandler(
 	}
 
 	return h
+}
+
+func (h *PrettyHandler) clone() *PrettyHandler {
+	attrs := make([]slog.Attr, len(h.attrs))
+	copy(attrs, h.attrs)
+	groups := make([]string, len(h.groups))
+	copy(groups, h.groups)
+	return &PrettyHandler{
+		l:      h.l,
+		attrs:  attrs,
+		groups: groups,
+	}
+}
+
+type attrPair struct {
+	key   string
+	value any
+}
+
+func flattenAttr(prefix string, attr slog.Attr, out *[]attrPair) {
+	value := attr.Value.Resolve()
+
+	if value.Kind() == slog.KindGroup {
+		nextPrefix := prefix
+		if attr.Key != "" {
+			if nextPrefix != "" {
+				nextPrefix += "."
+			}
+			nextPrefix += attr.Key
+		}
+		for _, child := range value.Group() {
+			flattenAttr(nextPrefix, child, out)
+		}
+		return
+	}
+
+	key := attr.Key
+	if prefix != "" && key != "" {
+		key = prefix + "." + key
+	} else if prefix != "" && key == "" {
+		key = prefix
+	}
+	if key == "" {
+		key = "<root>"
+	}
+	*out = append(*out, attrPair{
+		key:   key,
+		value: value.Any(),
+	})
+}
+
+func resolveAttr(a slog.Attr) slog.Attr {
+	return slog.Attr{
+		Key:   a.Key,
+		Value: a.Value.Resolve(),
+	}
 }
 
 func formatAttrValue(v any) []string {

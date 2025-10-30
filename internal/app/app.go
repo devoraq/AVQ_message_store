@@ -12,6 +12,7 @@ import (
 
 	"github.com/devoraq/AVQ_message_store/internal/app/happ"
 	"github.com/devoraq/AVQ_message_store/internal/infrastructure/config"
+	"github.com/devoraq/AVQ_message_store/internal/infrastructure/eventbus/kafka"
 	"github.com/devoraq/AVQ_message_store/internal/infrastructure/nosql/mongodb"
 )
 
@@ -30,12 +31,13 @@ type App struct {
 func New(_ context.Context, cfg *config.Config, log *slog.Logger) (*App, error) {
 	app := &App{
 		log:       log,
-		container: NewContainer(log, cfg.RetryConfig),
+		container: NewContainer(log, cfg),
 	}
 
 	mongo := mustInitMongo(cfg, log)
+	kafka := mustInitKafka(cfg, log)
 
-	app.container.Add(mongo)
+	app.container.Add(mongo, kafka)
 
 	if cfg.IsHTTPEnabled {
 		app.happ = buildHTTP(cfg.HTTPConfig, log)
@@ -101,7 +103,7 @@ func buildHTTP(cfg *config.HTTPConfig, log *slog.Logger) *happ.HApp {
 
 func mustInitMongo(cfg *config.Config, log *slog.Logger) *mongodb.MongoDB {
 	client, err := mongodb.New(&mongodb.MongoDeps{
-		Cfg:    cfg.Mongo,
+		Cfg:    cfg.MongoConfig,
 		Logger: log,
 	})
 	if err != nil {
@@ -110,4 +112,8 @@ func mustInitMongo(cfg *config.Config, log *slog.Logger) *mongodb.MongoDB {
 	}
 
 	return client
+}
+
+func mustInitKafka(cfg *config.Config, log *slog.Logger) *kafka.Kafka {
+	return kafka.NewKafka(&kafka.KafkaDeps{Cfg: cfg, Log: log})
 }

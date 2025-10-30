@@ -6,7 +6,6 @@ import (
 	"context"
 	"crypto/rand"
 	"errors"
-	"log/slog"
 	"math/big"
 	"time"
 
@@ -16,47 +15,31 @@ import (
 // Do выполняет переданную функцию fn с логикой повторных попыток.
 // Функция будет повторяться до успешного выполнения или пока не исчерпаются все попытки.
 // Поддерживает отмену через context, экспоненциальный рост задержки и случайный разброс (jitter).
-func Do(ctx context.Context, log *slog.Logger, cfg *config.RetryConfig, fn func(ctx context.Context) error) error {
-	if log == nil {
-		return errors.New("retry.Do: logger cannot be nil")
-	}
+func Do(ctx context.Context, cfg *config.Config, fn func(ctx context.Context) error) error {
 	if cfg == nil {
 		return errors.New("retry.Do: config cannot be nil")
 	}
 
-	var err error
-	for i := 0; i < cfg.Attempts; i++ {
-		if err = fn(ctx); err == nil {
+	// sane defaults, если значения не заданы
+	sanitize(cfg)
+
+	var lastErr error
+	delay := cfg.Initial
+
+	for attempt := 1; attempt <= cfg.Attempts; attempt++ {
+		if err := fn(ctx); err == nil {
 			return nil
+		} else {
+			lastErr = err
 		}
 
-		log.Warn("Operation failed, retrying...",
-			slog.String("error", err.Error()),
-			slog.Int("attempt", i+1),
-			slog.Int("total_attempts", cfg.Attempts),
-		)
-
-		if i == cfg.Attempts-1 {
+		// если это была последняя попытка — выходим
+		if attempt == cfg.Attempts {
 			break
 		}
 
-		backoff := float64(cfg.Initial) * pow(cfg.Factor, i)
-
-		if cfg.Jitter {
-			maxJitter := int64(backoff / 2)
-			if maxJitter > 0 {
-				jitter, randErr := rand.Int(rand.Reader, big.NewInt(maxJitter))
-				if randErr == nil {
-					backoff += float64(jitter.Int64())
-				}
-			}
-		}
-
-		if backoff > float64(cfg.Max) {
-			backoff = float64(cfg.Max)
-		}
-
-		delay := time.Duration(backoff)
+		// считаем следующую задержку
+		delay = nextDelay(delay, cfg)
 
 		timer := time.NewTimer(delay)
 		select {
@@ -68,14 +51,40 @@ func Do(ctx context.Context, log *slog.Logger, cfg *config.RetryConfig, fn func(
 		case <-timer.C:
 		}
 	}
-	return err
+
+	return lastErr
 }
 
-// pow - простая реализация возведения в степень для float, чтобы не импортировать math.
-func pow(base float64, exp int) float64 {
-	result := 1.0
-	for i := 0; i < exp; i++ {
-		result *= base
+// nextDelay возвращает увеличенный интервал с crypto-jitter.
+func nextDelay(prev time.Duration, cfg *config.Config) time.Duration {
+	backoff := float64(prev) * cfg.Factor
+	if backoff > float64(cfg.Max) {
+		backoff = float64(cfg.Max)
 	}
-	return result
+
+	if cfg.Jitter {
+		jitterMax := int64(backoff / 2)
+		if jitterMax > 0 {
+			if n, err := rand.Int(rand.Reader, big.NewInt(jitterMax)); err == nil {
+				backoff += float64(n.Int64())
+			}
+		}
+	}
+
+	return time.Duration(backoff)
+}
+
+func sanitize(cfg *config.Config) {
+	if cfg.Attempts <= 0 {
+		cfg.Attempts = 3
+	}
+	if cfg.Initial <= 0 {
+		cfg.Initial = time.Second
+	}
+	if cfg.Max <= 0 {
+		cfg.Max = 30 * time.Second
+	}
+	if cfg.Factor < 1 {
+		cfg.Factor = 2.0
+	}
 }

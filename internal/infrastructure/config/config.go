@@ -15,7 +15,8 @@ type Config struct {
 	*AppConfig   `yaml:"app"`
 	*RetryConfig `yaml:"retry"`
 	*HTTPConfig  `yaml:"http"`
-	*Mongo       `yaml:"mongo"`
+	*MongoConfig `yaml:"mongo"`
+	*KafkaConfig `yaml:"kafka"`
 }
 
 // AppConfig описывает флаги включения подсистем приложения.
@@ -26,7 +27,7 @@ type AppConfig struct {
 }
 
 // Mongo хранит параметры подключения к MongoDB.
-type Mongo struct {
+type MongoConfig struct {
 	Addr           string        `yaml:"addr"`
 	Username       string        `yaml:"username"`
 	Password       string        `yaml:"password"`
@@ -35,13 +36,24 @@ type Mongo struct {
 	MaxPoolSize    uint64        `yaml:"max_pool_size"`
 }
 
+// KafkaConfig содержит настройки брокера Kafka, необходимые для инициализации
+// продюсеров, консьюмеров и управления топиками.
+type KafkaConfig struct {
+	Address       string      `yaml:"address"`
+	TestTopic     string      `yaml:"test-topic"`
+	GroupID       string      `yaml:"group-id"`
+	Network       string      `yaml:"network"`
+	FetchBackoff  RetryConfig `yaml:"fetchBackoff"`
+	CommitBackoff RetryConfig `yaml:"commitBackoff"`
+}
+
 // RetryConfig определяет параметры для механизма повторных попыток.
 type RetryConfig struct {
-	Attempts int           `yaml:"attempts" default:"3"`
-	Initial  time.Duration `yaml:"initial"  default:"1s"`
-	Max      time.Duration `yaml:"max"      default:"30s"`
-	Factor   float64       `yaml:"factor"   default:"2.0"`
-	Jitter   bool          `yaml:"jitter"   default:"true"`
+	Attempts int           `yaml:"attempts" env-default:"3"`
+	Initial  time.Duration `yaml:"initial"  env-default:"1s"`
+	Max      time.Duration `yaml:"max"      env-default:"30s"`
+	Factor   float64       `yaml:"factor"   env-default:"2.0"`
+	Jitter   bool          `yaml:"jitter"   env-default:"true"`
 }
 
 // HTTPConfig задает настройки HTTP-сервера.

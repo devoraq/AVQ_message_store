@@ -19,16 +19,16 @@ type Component interface {
 
 // Container хранит набор компонентов и управляет их жизненным циклом.
 type Container struct {
-	comps       []Component
-	log         *slog.Logger
-	retryConfig *config.RetryConfig
+	comps []Component
+	log   *slog.Logger
+	cfg   *config.Config
 }
 
 // NewContainer создаёт пустой контейнер без зарегистрированных компонентов.
-func NewContainer(log *slog.Logger, retryConfig *config.RetryConfig) *Container {
+func NewContainer(log *slog.Logger, cfg *config.Config) *Container {
 	return &Container{
-		log:         log,
-		retryConfig: retryConfig,
+		log: log,
+		cfg: cfg,
 	}
 }
 
@@ -41,7 +41,7 @@ func (c *Container) StartAll(ctx context.Context) error {
 	for _, comp := range c.comps {
 		component := comp
 
-		err := retry.Do(ctx, c.log, c.retryConfig, func(ctx context.Context) error {
+		err := retry.Do(ctx, c.cfg, func(ctx context.Context) error {
 			return component.Start(ctx)
 		})
 
