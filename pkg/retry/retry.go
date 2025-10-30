@@ -26,9 +26,11 @@ func Do(ctx context.Context, cfg *config.Config, fn func(ctx context.Context) er
 	delay := cfg.Initial
 
 	for attempt := 1; attempt <= cfg.Attempts; attempt++ {
-		if err := fn(ctx); err != nil {
-			lastErr = err
+		err := fn(ctx)
+		if err == nil {
+			return nil
 		}
+		lastErr = err
 
 		// если это была последняя попытка — выходим
 		if attempt == cfg.Attempts {
